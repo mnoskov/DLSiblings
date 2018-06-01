@@ -71,92 +71,46 @@ $ids = array_keys($children); //Индексный массив ID в выбор
 $curIndex = array_search($ID, $ids); //Текущий индекс (индекс текущего ID)
 
 $count = count($ids); // Длина массива $ids
-$lastIndex = $count - 1; // Последний индекс массива $ids
 
 $TPL = DLTemplate::getInstance($modx);
 
-if($count-1 > 0) {// Если длина выборки (за исключением текущего элемента) больше 0
+if ($count > 1) {// Если длина выборки (за исключением текущего элемента) больше 0
 
-	if(($count - 1) <= $prevQty + $nextQty) { // Если длина выборки (за исключением текущего элемента) меньше нужного кол-ва
-		// То просто выводим все элементы выборки
-		for($i=0; $i<=$lastIndex; $i++) {
-			$out .= ($curIndex == $i) ? "" : $TPL->parseChunk($tpl, $children[$ids[$i]]);
-		}
+	$start = min($curIndex + $prevQty, $currIndex + $count);
+	$end   = max($curIndex - $nextQty, $currIndex - $count);
 
-	} else { // Иначе ищем соседей
+	$index = 0;
 
-		for($i=1; $i<=$prevQty; $i++) {
+	for ($i = $start; $i >= $end; $i--) {
+		$docid = $ids[$i < 0 ? $i + $count : $i];
 
-			/** 
-			 * Для Prev
-			 * Если "перескока" в хвост нет, то индекс вычисляется как $curIndex - $i
-			 * Если из начала $ids перескочили в его хвост, то индекс считаем как $count + $curIndex - $i
-			 */
-			$index = ($curIndex - $i >= 0) ? $curIndex - $i : $count + $curIndex - $i;
-			
-			// Формируем массив $siblings с теми же индексами и значениями, как у $ids ($ids уже упорядочен как надо)
-			$siblings[$index] = $ids[$index];
-		}
-		
-		for($i=1; $i<=$nextQty; $i++) {
+		if ($docid != $ID) {
+			$iterationName = ($index % 2 == 1) ? 'Odd' : 'Even';
 
-			/**
-			 * Для Next
-			 * Если "перескока" на начало нет, то индекс вычисляется как $curIndex + $i
-			 * Если из хвоста $ids перескочили на его начало, то индекс считаем как $i - ($lastIndex - $curIndex) - 1
-			 */
-			$index = ($curIndex + $i <= $lastIndex) ? $curIndex + $i : $i - ($lastIndex - $curIndex) - 1;
-			
-			// Дополняем массив $siblings с теми же индексами и значениями, как у $ids
-			$siblings[$index] = $ids[$index];
-
-		}
-		
-		/**
-		 * В итоге $siblings - это индексный массив с пропусками индексов, значения - ID ресурсов
-		 * До сортировки выглядит примерно так: Array ( [6] => 114, [0] => 18, [5] => 109, [1] => 95 )
-		 */
-
-		// Сортируем по индексам (ключам) этот небольшой массив $siblings (не более 8 элементов, а скорее всего 2+2 или 3+3)		
-		ksort($siblings);
-		
-		/**
-		 * После сортировки выглядит так: Array ( [0] => 18, [1] => 95, [5] => 109, [6] => 114 )
-	     * Теперь он отсортирован точно так же, как и было в выходных данных ДокЛистера
-		 */
-
-		/**
-		 * Выводим все элементы $siblings с шаблонизацией
-		 * $i - номер итерации начиная с 1
-		 */		
-		$i = 1;
-		
-		foreach($siblings as $value) {
-			$iterationName = ($i % 2 == 1) ? 'Odd' : 'Even';
-			
 			// Какой шаблон выводить на этой итерации?
 			// Идут сверху вниз по убыванию приоритета
 			$renderTPL = $tpl;
 			$renderTPL = \APIhelpers::getkey($params, 'tpl'.$iterationName, $renderTPL);			// tplOdd или tplEven
-			$renderTPL = \APIhelpers::getkey($params, 'tplId'.$i, $renderTPL);				// tplIdN начиная с 1
+			$renderTPL = \APIhelpers::getkey($params, 'tplId' . ($index + 1), $renderTPL);				// tplIdN начиная с 1
 
-			if ($i == 1) {
+			if ($index == 0) {
 				$renderTPL = \APIhelpers::getkey($params, 'tplFirst', $renderTPL);			// tplFirst
 			}
-			if ($i == $prevQty + $nextQty) {
+
+			if ($index == $prevQty + $nextQty) {
 				$renderTPL = \APIhelpers::getkey($params, 'tplLast', $renderTPL);			// tplLast
 			}	
-			
-			$out .= $TPL->parseChunk($renderTPL, $children[$value]);			
-			
-			$i++; // Увеличим $i на 1
+
+			$out .= $TPL->parseChunk($renderTPL, $children[$docid]);	
 		}
 
+		$index++;
 	}
         
 	// Оборачиваем в ownerTPL, если он не null
-	if( $ownerTPL )
+	if( $ownerTPL ) {
 		$out = $TPL->parseChunk( $ownerTPL, array('wrap' => $out) );
+	}
 
 } else { // Если длина выборки (за исключением текущего элемента) <= 0 (нет элементов, кроме текущего, или вообще нет)
         
