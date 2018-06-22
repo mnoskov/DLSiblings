@@ -55,7 +55,6 @@ $noneWrapOuter = \APIhelpers::getkey($params, 'noneWrapOuter', 1);
 
 
 $out = "";
-$siblings = array();
 
 $ID = $modx->documentIdentifier;
 
@@ -65,66 +64,76 @@ $params = array_merge( $params, array('api' => '1', 'debug' => '0', 'display' =>
 // Этот вызов ДокЛистера обрабатывает все наши параметры, кроме шаблонов и подстановки плейсхолдера [+sysKey.class+]
 $json = $modx->runSnippet("DocLister", $params);
 $children = jsonHelper::jsonDecode($json, array('assoc' => true));
-$children = is_array($children) ? $children : array(); // Тут проверка, что вернулся массив
 
-$ids = array_keys($children); //Индексный массив ID в выборке (потом избавиться от него через prev-next?)
-$curIndex = array_search($ID, $ids); //Текущий индекс (индекс текущего ID)
+if (!is_array($children) || is_array($children) && count($children) < 2) {
+	return '';
+}
 
-$count = count($ids); // Длина массива $ids
+$ids = array_keys($children);
+$count = count($ids);
+$curIndex = array_search($ID, $ids);
+
+$queue = [];
+
+$iteration = 0;
+$index = $curIndex;
+while ($iteration < $prevQty) {
+	if ($ids[$index] != $ID) {
+		$queue[] = $ids[$index];
+		$iteration++;
+	}
+	
+	$index++;
+	
+	if ($index >= $count) {
+		$index = 0;
+	}
+}
+
+$iteration = 0;
+$index = $curIndex;
+while ($iteration < $nextQty) {
+	if ($ids[$index] != $ID) {
+		$queue[] = $ids[$index];
+		$iteration++;
+	}
+	
+	$index--;
+	
+	if ($index < 0) {
+		$index = $count - 1;
+	}
+}
 
 $TPL = DLTemplate::getInstance($modx);
 
-if ($count > 1) {// Если длина выборки (за исключением текущего элемента) больше 0
+foreach ($queue as $index => $docid) {
+	if ($docid != $ID) {
+		$iterationName = ($index % 2 == 1) ? 'Odd' : 'Even';
 
-	$start = min($curIndex + $prevQty, $currIndex + $count);
-	$end   = max($curIndex - $nextQty, $currIndex - $count);
+		// Какой шаблон выводить на этой итерации?
+		// Идут сверху вниз по убыванию приоритета
+		$renderTPL = $tpl;
+		$renderTPL = \APIhelpers::getkey($params, 'tpl' . $iterationName, $renderTPL);			// tplOdd или tplEven
+		$renderTPL = \APIhelpers::getkey($params, 'tplId' . ($index + 1), $renderTPL);				// tplIdN начиная с 1
 
-	$index = 0;
-
-	for ($i = $start; $i >= $end; $i--) {
-		$docid = $ids[$i < 0 ? $i + $count : $i];
-
-		if ($docid != $ID) {
-			$iterationName = ($index % 2 == 1) ? 'Odd' : 'Even';
-
-			// Какой шаблон выводить на этой итерации?
-			// Идут сверху вниз по убыванию приоритета
-			$renderTPL = $tpl;
-			$renderTPL = \APIhelpers::getkey($params, 'tpl'.$iterationName, $renderTPL);			// tplOdd или tplEven
-			$renderTPL = \APIhelpers::getkey($params, 'tplId' . ($index + 1), $renderTPL);				// tplIdN начиная с 1
-
-			if ($index == 0) {
-				$renderTPL = \APIhelpers::getkey($params, 'tplFirst', $renderTPL);			// tplFirst
-			}
-
-			if ($index == $prevQty + $nextQty) {
-				$renderTPL = \APIhelpers::getkey($params, 'tplLast', $renderTPL);			// tplLast
-			}	
-
-			$out .= $TPL->parseChunk($renderTPL, $children[$docid]);	
+		if ($index == 0) {
+			$renderTPL = \APIhelpers::getkey($params, 'tplFirst', $renderTPL);			// tplFirst
 		}
 
-		$index++;
+		if ($index == $prevQty + $nextQty - 1) {
+			$renderTPL = \APIhelpers::getkey($params, 'tplLast', $renderTPL);			// tplLast
+		}	
+
+		$out .= $TPL->parseChunk($renderTPL, $children[$docid]);	
 	}
-        
-	// Оборачиваем в ownerTPL, если он не null
-	if( $ownerTPL ) {
-		$out = $TPL->parseChunk( $ownerTPL, array('wrap' => $out) );
-	}
 
-} else { // Если длина выборки (за исключением текущего элемента) <= 0 (нет элементов, кроме текущего, или вообще нет)
-        
-	// Далее копируем поведение ДокЛистер для параметра &noneWrapOuter и шаблонов &noneTPL и &ownerTPL
-	
-	// Если noneTPL не null, парсим его без параметров
-	if( $noneTPL )
-		$out = $TPL->parseChunk( $noneTPL, array() );
+	$index++;
+}
 
-	// Если noneWrapOuter не 0, и ownerTPL не null
-	if( $noneWrapOuter && $ownerTPL )
-		// то распарсенный noneTPL оборачиваем в ownerTPL
-		$out = $TPL->parseChunk( $ownerTPL, array('wrap' => $out) );
-
+// Оборачиваем в ownerTPL, если он не null
+if( $ownerTPL ) {
+	$out = $TPL->parseChunk( $ownerTPL, array('wrap' => $out) );
 }
 
 return $out;
