@@ -56,7 +56,7 @@ $noneWrapOuter = \APIhelpers::getkey($params, 'noneWrapOuter', 1);
 
 $out = "";
 
-$ID = $modx->documentIdentifier;
+$ID = isset($docid) ? $docid : $modx->documentIdentifier;
 
 // мержим 'display' => '0' (выводить все док-ты), потому что за кол-во отвечает Qty, prevQty и nextQty
 $params = array_merge( $params, array('api' => '1', 'debug' => '0', 'display' => '0') );
